@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Goals">
+<meta name="theme-color" content="#f6f6f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121512" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>Goal Grove</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">
+<style>
+/* Layout: a single growing plant. The root sits at the bottom, thin stems rise to icon nodes, and any node can sprout more branches. Tapping a node opens an edit sheet. */
+:root{
+  --bg:#f6f6f2; --surface:#ffffff; --node:#e9ece4; --ink:#2b2f2a; --muted:#7d837b; --line:#dfe2da;
+  --stem:#8e958b; --leaf:#7a9670; --leaf-soft:#bcc8b0; --danger:#a8513f; --on-leaf:#ffffff;
+  --display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --body:"DM Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121512; --surface:#1a1e1a; --node:#252b24; --ink:#e6e9e3; --muted:#959d92; --line:#2f362e;
+  --stem:#6d7569; --leaf:#9bb88c; --leaf-soft:#4e5e47; --danger:#d98572; --on-leaf:#121512; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121512; --surface:#1a1e1a; --node:#252b24; --ink:#e6e9e3; --muted:#959d92; --line:#2f362e;
+  --stem:#6d7569; --leaf:#9bb88c; --leaf-soft:#4e5e47; --danger:#d98572; --on-leaf:#121512; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:calc(14px + env(safe-area-inset-top,0px)) calc(40px + env(safe-area-inset-bottom,0px));
+  margin:0;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior-y:none}
+html{color-scheme:light}
+.node,.round,.btn,.chip,.icon-pick,.tick{-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.field,.s-note,.page-sub,.add-task{font-size:16px}
+.top-actions{display:flex;gap:8px}
+.sheet::before{content:"";align-self:center;width:38px;height:4px;border-radius:2px;background:var(--line);margin:-6px 0 2px}
+@media (min-width:860px){.sheet::before{display:none}}
+.key-field{font-family:ui-monospace,Menlo,monospace}
+.small-print{font-size:13px;color:var(--muted);line-height:1.5}
+/* progress meter */
+.meter{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.meter-top{width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:12px 14px;text-align:left}
+.meter-num{font-family:var(--display);font-size:40px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;color:var(--leaf);min-width:2.6ch}
+.meter-num small{font-size:20px;margin-left:1px}
+.meter-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.meter-label{font-size:13px;color:var(--muted)}
+.meter-label b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.bar{display:block;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px;background:var(--leaf)}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .45s ease}}
+.chev{width:18px;height:18px;color:var(--muted);flex:none;transition:transform .2s}
+[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.meter-body{padding:0 14px 14px;display:flex;flex-direction:column;gap:16px}
+.goal-rows{display:flex;flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--line)}
+.goal-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:5px 10px;align-items:center;background:none;border:0;padding:0;text-align:left;width:100%}
+.goal-row svg{width:18px;height:18px;color:var(--muted)}
+.goal-row .gt{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.goal-row .gp{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.goal-row .bar{grid-column:2/4;height:5px}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:92px;margin-top:6px}
+.wk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
+.wk i{width:100%;max-width:28px;border-radius:5px 5px 2px 2px;background:var(--leaf-soft);min-height:3px}
+.wk.today i{background:var(--leaf)}
+.wk span{font-size:11px;color:var(--muted)}
+.wk b{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;min-height:14px}
+.today-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 14px 12px}
+.today-row .chip{display:inline-flex;align-items:center;gap:5px;font-family:inherit}
+.today-row .chip svg{width:13px;height:13px;color:var(--leaf)}
+.progress-meter{display:flex;flex-direction:column;gap:6px}
+/* reminders */
+.disc{position:relative}
+.bell{position:absolute;top:-3px;right:-3px;width:19px;height:19px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;color:var(--leaf)}
+.bell svg{width:11px;height:11px}
+.rem-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rem-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.rem-grid .field{width:100%;min-height:42px}
+select.field{-webkit-appearance:none;appearance:none}
+select.field:disabled{opacity:.45}
+.rem-summary{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-weight:500}
+.rem-summary svg,.btn svg.bi{width:17px;height:17px;flex:none}
+.rem-summary svg{color:var(--leaf)}
+.btn.with-icon{display:inline-flex;align-items:center;gap:7px}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--leaf);outline-offset:2px}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
+
+.top{display:flex;align-items:flex-start;gap:12px}
+.top-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.page-title{font-family:var(--display);font-weight:500;font-size:clamp(36px,6vw,48px);line-height:1.05;background:none;border:0;padding:0;width:100%;letter-spacing:-.01em}
+.page-sub{background:none;border:0;padding:0;color:var(--muted);width:100%;font-size:15px}
+.page-title:focus,.page-sub:focus{outline:none;box-shadow:0 1px 0 var(--line)}
+.round{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none;color:var(--muted)}
+.round:hover{color:var(--ink)}
+.round svg{width:20px;height:20px}
+
+.banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;color:var(--muted)}
+.tag{background:var(--leaf);color:var(--on-leaf);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;padding:2px 7px}
+.btn{background:var(--leaf);color:var(--on-leaf);border:0;border-radius:10px;padding:9px 14px;font-weight:600;white-space:nowrap}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--danger);color:var(--on-leaf)}
+
+.canvas-wrap{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.canvas{position:relative;margin:0 auto}
+.canvas svg.stems{position:absolute;inset:0;overflow:visible}
+.node{position:absolute;width:120px;margin-left:-60px;background:none;border:0;padding:0;display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center}
+.node[disabled]{cursor:default}
+.disc{width:var(--size);height:var(--size);border-radius:50%;padding:2px;background:conic-gradient(var(--leaf) var(--p), var(--line) 0)}
+.disc-in{width:100%;height:100%;border-radius:50%;background:var(--node);display:grid;place-items:center;color:var(--ink);transition:background .2s,color .2s}
+.disc-in svg{width:42%;height:42%}
+.node.done .disc-in{background:var(--leaf);color:var(--on-leaf)}
+.node:not([disabled]):hover .disc-in{background:var(--leaf-soft)}
+.node.done:not([disabled]):hover .disc-in{background:var(--leaf)}
+.node.open .disc{box-shadow:0 0 0 4px var(--bg),0 0 0 5px var(--leaf)}
+.n-title{font-family:var(--display);font-weight:600;font-size:17px;line-height:1.1;text-wrap:balance;max-width:100%;overflow-wrap:anywhere}
+.node.done .n-title{color:var(--muted)}
+.n-note{font-size:12px;color:var(--muted);line-height:1.35;max-width:108px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.n-count{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.node.root .n-title{font-size:22px}
+.status{font-size:12px;color:var(--muted);text-align:center}
+
+/* edit sheet */
+.sheet{position:fixed;z-index:10;left:0;right:0;bottom:0;max-height:78vh;overflow-y:auto;background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;
+  box-shadow:0 -8px 30px rgba(0,0,0,.08);
+  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+@media (min-width:860px){.sheet{left:auto;right:calc(20px + env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));top:calc(20px + env(safe-area-inset-top,0px));width:360px;max-height:none;border:1px solid var(--line);border-radius:18px}}
+.sheet-head{display:flex;align-items:center;gap:10px}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;flex:1}
+.x{background:none;border:0;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;border-radius:8px}
+.x:hover{background:var(--bg);color:var(--ink)}
+.s-title{font-family:var(--display);font-size:28px;font-weight:600;background:none;border:0;border-bottom:1px solid var(--line);padding:2px 0;width:100%}
+.s-note{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%;resize:vertical;min-height:58px}
+.s-title:focus,.s-note:focus{outline:none;border-color:var(--leaf)}
+.icons{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.icon-pick{aspect-ratio:1;border-radius:50%;border:1px solid transparent;background:var(--bg);display:grid;place-items:center;color:var(--muted);padding:0}
+.icon-pick svg{width:55%;height:55%}
+.icon-pick[aria-pressed="true"]{border-color:var(--leaf);color:var(--ink);background:var(--node)}
+.label{font-size:12px;color:var(--muted);font-weight:500}
+.row{display:flex;gap:8px}
+.field{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.field:focus{outline:none;border-color:var(--leaf)}
+.kids{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.kid{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.kid:last-child{border-bottom:0}
+.kid button.name{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kid .meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tick{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--stem);background:none;flex:none;display:grid;place-items:center;padding:0;color:var(--on-leaf)}
+.tick svg{width:14px;height:14px;opacity:0}
+.tick[aria-pressed="true"]{background:var(--leaf);border-color:var(--leaf)}
+.tick[aria-pressed="true"] svg{opacity:1}
+.done-toggle{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:left;font-weight:500}
+.progress{font-size:14px;color:var(--muted)}
+.progress b{color:var(--ink);font-weight:600}
+.sheet-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px;font-size:13px;color:var(--muted)}
+.block{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.block-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.btn[disabled]{opacity:.5;cursor:default}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn.claude{display:inline-flex;gap:8px;align-items:center;justify-content:center}
+.btn.claude svg{width:16px;height:16px}
+.row.wrapped{flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;color:var(--ink);text-decoration:none;background:var(--bg)}
+.chip:hover{border-color:var(--leaf)}
+.sugs,.links{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.sug{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+.sug .tick{margin-top:1px}
+.sug-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sug-title{font-weight:600;display:flex;gap:6px;align-items:center}
+.sug-title svg{width:16px;height:16px;color:var(--muted);flex:none}
+.sug-note{font-size:13px;color:var(--muted)}
+.ext{font-size:13px;color:var(--leaf);text-decoration:none;font-weight:500;overflow-wrap:anywhere}
+.ext:hover{text-decoration:underline}
+.link{display:flex;align-items:center;gap:8px;padding:5px 0}
+.link .ext{flex:1;min-width:0}
+.thinking{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.pulse{width:9px;height:9px;border-radius:50%;background:var(--leaf);flex:none}
+.answer{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;white-space:pre-wrap;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.answer-q{font-size:12px;color:var(--muted);font-weight:600}
+.note-err{font-size:13px;color:var(--danger)}
+@media (prefers-reduced-motion:no-preference){.stems path.stem{transition:stroke .3s}.pulse{animation:pulse 1.1s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.25;transform:scale(.7)}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="top-text">
+      <input class="page-title" id="page-title" aria-label="Page title" value="My Goals">
+      <input class="page-sub" id="page-sub" aria-label="Subtitle" value="A calmer, more intentional future.">
+    </div>
+    <div class="top-actions"><button class="round" id="open-settings" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+    <button class="round" id="add-top" aria-label="Add a goal" title="Add a goal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+  </header>
+  <div id="banner"></div>
+  <div id="meter-host"></div>
+  <div class="canvas-wrap" id="canvas-wrap"><div class="canvas" id="canvas"></div></div>
+  <div class="status" id="status">Loading your goals…</div>
+</div>
+<div id="sheet-host"></div>
+<div id="settings-host"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  const ICONS = {
+    sprout: "M12 21v-9M12 12c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3.5 2.5 5 6 5z",
+    coins: "M5 7c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2zM5 7v4c0 1.1 3.1 2 7 2s7-.9 7-2V7M5 11v4c0 1.1 3.1 2 7 2s7-.9 7-2v-4M5 15v2c0 1.1 3.1 2 7 2s7-.9 7-2v-2",
+    piggy: "M5 12c0-3.3 3.1-6 7-6 2.5 0 4.6 1 5.8 2.6L20 8v3.5l-1.2.5c-.4 1.4-1.3 2.6-2.6 3.4V18h-2.5v-1.7a8 8 0 0 1-3.4 0V18H7.8v-2.3C6.1 14.6 5 13.4 5 12zM14.5 10.5h.01M10 6.3c.3-1.3 1.4-2.3 2.8-2.3",
+    house: "M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-6h4v6",
+    shield: "M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3zM9 12l2 2 4-4",
+    trend: "M4 17l5-5 4 3 7-7M15 8h5v5",
+    car: "M5 16v-4l2-5h10l2 5v4zM5 16v2M19 16v2M7.5 13.5h.01M16.5 13.5h.01M5 12h14",
+    music: "M9 18V6l10-2v12M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM19 16a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z",
+    video: "M4 7c0-1.1.9-2 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM10 9.5v5l4.5-2.5z",
+    dumbbell: "M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12",
+    heart: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",
+    book: "M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z",
+    briefcase: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
+    plane: "M3 13l18-7-7 16-2.5-6.5zM11.5 15.5L21 6",
+    star: "M12 4l2.4 5 5.6.8-4 3.9.9 5.5L12 16.6 7.1 19.2l.9-5.5-4-3.9 5.6-.8z",
+    flag: "M5 21V4M5 4h12l-2 4 2 4H5"
+  };
+  const CHECK = "M5 12.5l4.5 4.5L19 7";
+  const icon = (name, sw = 1.5) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name] || ICONS.sprout}"/></svg>`;
+
+  const node = (title, icn, note = "", children = [], done = false) => ({ id: uid("n"), title, note, icon: icn, done, children });
+  const makeExample = () => ({
+    title: "My Goals", subtitle: "A calmer, more intentional future.",
+    root: node("Goals", "sprout", "A better, freer life.", [
+      node("Health", "heart", "Feel strong and rested.", [
+        node("Train 4x a week", "dumbbell", "Lifting and cardio.", [], true),
+        node("Sleep by 11", "star", "Most nights.")
+      ]),
+      node("Music", "music", "Build the project.", [
+        node("Finish the next EP", "flag", "Four tracks, mixed and mastered.", [
+          node("Mixdowns", "music", "All four tracks.", [], true),
+          node("Mastering", "trend", "Reference-checked.")
+        ]),
+        node("Grow the channel", "video", "One tutorial a week.")
+      ]),
+      node("Money", "coins", "Build wealth and security.", [
+        node("Emergency fund", "shield", "6 months of expenses.", [], true),
+        node("Invest monthly", "trend", "Automate it."),
+        node("Save for a house", "house", "A home I love.")
+      ])
+    ])
+  });
+
+  const state = { meterOpen: false, remEdit: false, remMsg: "", settings: false, keyMsg: "", backupMsg: "", importDoc: null, doc: null, example: true, openId: null, confirmDel: false, ready: false, mode: "memory", centered: false };
+  let db = null, userId = null, chain = Promise.resolve();
+  let sampleFn = null, claudeOff = "", planCtl = null, askCtl = null;
+  const SPARK = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/></svg>`;
+  const CHECKSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
+
+  // ---------- storage (on this phone) ----------
+  const LS_KEY = "goal-grove:tree", KEY_KEY = "goal-grove:apikey";
+  const MODEL = "claude-sonnet-5-5", API = "https://api.anthropic.com/v1/messages";
+  const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } };
+  const lsDel = k => { try { localStorage.removeItem(k); } catch {} };
+  const setStatus = t => { $("#status").textContent = t; };
+  const getKey = () => lsGet(KEY_KEY) || "";
+  const hasKey = () => !!getKey();
+
+  function save() {
+    if (state.example || !state.doc) return;
+    if (!lsSet(LS_KEY, JSON.stringify(state.doc))) setStatus("Couldn't save on this phone. Storage may be full.");
+  }
+
+  // Claude, using your own Anthropic API key (stored only on this phone)
+  async function callClaude(prompt, { signal, onText, maxTokens = 1500 } = {}) {
+    const key = getKey();
+    if (!key) throw { code: "no_key" };
+    let r;
+    try {
+      r = await fetch(API, { method: "POST", signal, headers: {
+        "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, stream: !!onText, messages: [{ role: "user", content: prompt }] }) });
+    } catch (e) { throw { code: e && e.name === "AbortError" ? "cancelled" : "offline" }; }
+    if (!r.ok) {
+      const code = r.status === 401 || r.status === 403 ? "bad_key" : r.status === 429 ? "rate_limited" : r.status === 400 ? "bad_request" : "upstream_error";
+      throw { code };
+    }
+    if (!onText) {
+      const j = await r.json();
+      const text = (j.content || []).filter(x => x.type === "text").map(x => x.text).join("");
+      if (!text) throw { code: "empty_completion" };
+      return { text };
+    }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", text = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line.startsWith("data:")) continue;
+          let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+          if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") { text += ev.delta.text; onText({ text }); }
+          else if (ev.type === "error") throw { code: "upstream_error", text };
+        }
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") throw { code: "cancelled", text };
+      throw e && e.code ? e : { code: "upstream_error", text };
+    }
+    if (!text) throw { code: "empty_completion" };
+    return { text };
+  }
+  callClaude.json = async (prompt, opts = {}) => {
+    const { text } = await callClaude(prompt, { signal: opts.signal });
+    const m = text.match(/\[[\s\S]*\]/);
+    try { return JSON.parse(m ? m[0] : text); } catch { throw { code: "invalid_json", text }; }
+  };
+
+  function boot() {
+    sampleFn = callClaude;
+    const raw = lsGet(LS_KEY);
+    if (raw) { try { state.doc = JSON.parse(raw); state.example = false; } catch {} }
+    if (!state.doc) { state.doc = makeExample(); state.example = true; }
+    state.ready = true;
+    setStatus(lsSet("goal-grove:t", "1") ? "Saved on this phone. Works offline." : "This browser is blocking storage, so changes won't be kept.");
+    try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
+    render();
+  }
+
+  // ---------- settings: Claude key + backups ----------
+  function drawSettings() {
+    const host = $("#settings-host");
+    if (!state.settings) { host.innerHTML = ""; return; }
+    const k = getKey();
+    host.innerHTML = `<section class="sheet" role="dialog" aria-label="Settings">
+      <div class="sheet-head"><span class="eyebrow">Settings</span><button class="x" id="set-close" aria-label="Close">✕</button></div>
+      <div class="block" style="border-top:0;padding-top:0">
+        <span class="label">Claude</span>
+        ${k ? `<div class="small-print">Connected with key ending <b>…${esc(k.slice(-4))}</b>. Step suggestions and "Ask Claude" are on.</div>
+          <div class="row wrapped"><button class="btn ghost" id="key-remove">Remove key</button></div>`
+          : `<div class="small-print">Paste an Anthropic API key to turn on step suggestions and "Ask Claude". Get one at console.anthropic.com under API Keys. It's pay-as-you-go, and a set of suggestions costs a fraction of a cent.</div>
+          <form class="row" id="key-form"><input class="field key-field" id="key-input" type="password" placeholder="sk-ant-…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="API key"><button class="btn" type="submit">Save</button></form>`}
+        ${state.keyMsg ? `<div class="note-err">${esc(state.keyMsg)}</div>` : ""}
+        <div class="small-print">Your key stays on this phone and is only sent to Anthropic.</div>
+      </div>
+      <div class="block">
+        <span class="label">Backup</span>
+        <div class="small-print">Your goals live on this phone. Save a backup now and then, to Files or iCloud Drive, so you never lose them.</div>
+        <div class="row wrapped"><button class="btn" id="export">Save a backup</button>
+          <label class="btn ghost" for="import-file" style="cursor:pointer">Restore a backup</label>
+          <input type="file" id="import-file" accept=".json,application/json" hidden></div>
+        ${state.importDoc ? `<div class="sheet-foot" style="border-top:0;padding-top:0"><span>Replace your current tree with this backup?</span><span class="row"><button class="btn danger" id="import-yes">Replace</button><button class="btn ghost" id="import-no">Cancel</button></span></div>` : ""}
+        ${state.backupMsg ? `<div class="small-print">${esc(state.backupMsg)}</div>` : ""}
+      </div>
+    </section>`;
+  }
+  async function exportBackup() {
+    if (state.example) { state.backupMsg = "Start your own tree first, then back it up."; render(); return; }
+    const name = "goal-grove-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+    const blob = new Blob([JSON.stringify(state.doc, null, 2)], { type: "application/json" });
+    try {
+      const file = new File([blob], name, { type: "application/json" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "Goal Grove backup" }); state.backupMsg = "Backup ready. Save it to Files or iCloud Drive."; render(); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    state.backupMsg = "Backup downloaded."; render();
+  }
+
+  // ---------- tree helpers ----------
+  function find(id, n = state.doc.root, parent = null) {
+    if (n.id === id) return { n, parent };
+    for (const c of n.children) { const r = find(id, c, n); if (r) return r; }
+    return null;
+  }
+  function leaves(n) { return n.children.length ? n.children.flatMap(leaves) : [n]; }
+  function progress(n) {
+    if (!n.children.length) return { done: n.done ? 1 : 0, total: 1, pct: n.done ? 100 : 0 };
+    const ls = leaves(n), d = ls.filter(x => x.done).length;
+    return { done: d, total: ls.length, pct: Math.round(d / ls.length * 100) };
+  }
+  function pathOf(id) {
+    let out = [];
+    const walk = (n, acc) => { if (n.id === id) { out = [...acc, n]; return true; } return n.children.some(c => walk(c, [...acc, n])); };
+    walk(state.doc.root, []);
+    return out;
+  }
+  function contextFor(n) {
+    const p = pathOf(n.id);
+    return `Their overall aim: ${state.doc.subtitle || "a better life"}\n`
+      + `Goal path (root to this goal): ${p.map(x => x.title + (x.note ? ` (${x.note})` : "")).join(" > ")}\n`
+      + `Already planned directly under "${n.title}": ${n.children.map(c => c.title + (progress(c).pct === 100 ? " [done]" : "")).join("; ") || "nothing yet"}`;
+  }
+  const searchText = n => pathOf(n.id).slice(1).slice(-2).map(x => x.title).join(" ") || n.title;
+  const gUrl = q => "https://www.google.com/search?q=" + encodeURIComponent(q);
+  const ytUrl = q => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+  const claudeUrl = n => "https://claude.ai/new?q=" + encodeURIComponent(`Help me work out how to achieve this goal, step by step, and what to do first.\n\n${contextFor(n)}`);
+  const hostOf = u => { try { const x = new URL(u); return x.hostname.replace(/^www\./, "") + (x.pathname.length > 1 ? x.pathname.slice(0, 24) + (x.pathname.length > 24 ? "…" : "") : ""); } catch { return u; } };
+  function errCopy(code) {
+    return ({
+      no_key: "Add your Claude API key in Settings first.",
+      bad_key: "That API key didn't work. Check it in Settings.",
+      offline: "You're offline. Claude needs an internet connection.",
+      bad_request: "Claude couldn't take that request. Try again.",
+      sampling_disabled: "Claude isn't available on this account. The web links below still work.",
+      rate_limited: "Too many requests, or your API credit has run out. Try again shortly.",
+      session_expired: "Sign in to Claude again, then try.",
+      invalid_json: "Claude's reply didn't come through properly. Try again.",
+      refused: "Claude couldn't help with that one. Try rewording the goal.",
+      empty_completion: "Claude didn't come back with anything. Try again."
+    })[code] || "Couldn't reach Claude. Try again.";
+  }
+  const BLOCKING = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"];
+
+  async function runPlan(n) {
+    planCtl?.abort(); planCtl = new AbortController();
+    const id = n.id, ctl = planCtl;
+    state.plan = { id, status: "loading" }; render();
+    const prompt = `You're helping someone plan the path to a goal in their personal goal tree.\n\n${contextFor(n)}\n\n`
+      + `Suggest 4 to 6 concrete, practical steps to reach "${n.title}", in the order they would do them. Don't repeat anything already planned. `
+      + `Reply with only a JSON array of objects like {"title":"Get mastering quotes","note":"Ask 3 engineers for price and turnaround","icon":"music","search":"how to choose a mastering engineer"}. `
+      + `title: 2 to 6 words. note: under 12 words. icon: one of ${Object.keys(ICONS).join(", ")}. search: a web search query that would help them learn how to do the step.`;
+    try {
+      const r = await sampleFn.json(prompt, { signal: ctl.signal, cache: false });
+      if (state.plan?.id !== id) return;
+      const items = (Array.isArray(r) ? r : []).filter(x => x && x.title).slice(0, 8).map(x => ({
+        title: String(x.title).slice(0, 60), note: String(x.note || "").slice(0, 120),
+        icon: ICONS[x.icon] ? x.icon : "sprout", search: String(x.search || "").slice(0, 160) }));
+      state.plan = items.length ? { id, status: "done", items, sel: new Set(items.map((_, i) => i)) }
+        : { id, status: "error", msg: "Claude didn't come back with any steps. Try again." };
+    } catch (e) {
+      if (state.plan?.id !== id) return;
+      if (e && e.code === "cancelled") state.plan = null;
+      else { state.plan = { id, status: "error", msg: errCopy(e && e.code) }; if (BLOCKING.includes(e && e.code)) claudeOff = errCopy(e.code); }
+    }
+    render();
+  }
+
+  async function runAsk(n, q) {
+    askCtl?.abort(); askCtl = new AbortController();
+    const id = n.id, ctl = askCtl;
+    state.ask = { id, q, text: "", loading: true, err: "" }; render();
+    const prompt = `Someone is working toward a goal in their personal goal tree.\n\n${contextFor(n)}\n\n`
+      + `Their question about "${n.title}": ${q}\n\n`
+      + `Answer practically and specifically, in under 180 words. Plain text: short paragraphs or simple "- " lists, no headings or bold.`;
+    try {
+      await sampleFn(prompt, { signal: ctl.signal, cache: false, onText: ({ text }) => {
+        if (state.ask?.id !== id) return;
+        state.ask.text = text; const el = document.getElementById("s-answer-text"); if (el) el.textContent = text;
+      } });
+    } catch (e) {
+      if (state.ask?.id !== id) return;
+      if (e && e.code !== "cancelled") { state.ask.err = errCopy(e.code); if (BLOCKING.includes(e.code)) claudeOff = errCopy(e.code); }
+      if (e && e.text) state.ask.text = e.text;
+    }
+    if (state.ask?.id === id) { state.ask.loading = false; render(); }
+  }
+
+  function getThere(n, isRoot) {
+    const P = state.plan && state.plan.id === n.id ? state.plan : null;
+    const canClaude = hasKey() && !claudeOff;
+    let plan = "";
+    if (claudeOff) plan = `<div class="note-err">${esc(claudeOff)}</div>`;
+    else if (canClaude) {
+      if (!P) plan = `<button class="btn claude" id="s-plan">${SPARK}Suggest steps with Claude</button>`;
+      else if (P.status === "loading") plan = `<div class="thinking"><span class="pulse"></span><span style="flex:1">Claude is mapping out the steps…</span><button class="btn ghost small" id="s-plan-stop">Stop</button></div>`;
+      else if (P.status === "error") plan = `<div class="note-err">${esc(P.msg)}</div><button class="btn ghost" id="s-plan">Try again</button>`;
+      else plan = `<span class="label">Tick the ones you want, then add them as branches.</span>
+        <ul class="sugs">${P.items.map((it, i) => `<li class="sug">
+          <button class="tick" data-sug="${i}" aria-pressed="${P.sel.has(i)}" aria-label="Include ${esc(it.title)}">${CHECKSVG}</button>
+          <div class="sug-body"><span class="sug-title">${icon(it.icon)}${esc(it.title)}</span>
+            ${it.note ? `<span class="sug-note">${esc(it.note)}</span>` : ""}
+            ${it.search ? `<a class="ext" href="${gUrl(it.search)}" target="_blank" rel="noopener">Look it up ↗</a>` : ""}</div></li>`).join("")}</ul>
+        <div class="row wrapped"><button class="btn" id="s-plan-add" ${P.sel.size ? "" : "disabled"}>Add ${P.sel.size} as branch${P.sel.size === 1 ? "" : "es"}</button><button class="btn ghost" id="s-plan">Suggest again</button></div>`;
+    }
+    if (!claudeOff && !canClaude) plan = `<button class="btn ghost claude" data-open-settings>${SPARK}Connect Claude to get step suggestions</button>`;
+    const links = (n.links || []).map((l, i) => `<li class="link"><a class="ext" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label || hostOf(l.url))} ↗</a><button class="x" data-unlink="${i}" aria-label="Remove link" style="font-size:15px">✕</button></li>`).join("");
+    const A = state.ask && state.ask.id === n.id ? state.ask : null;
+    return `<div class="block">
+        <div class="block-head"><span class="label">How to get there</span></div>
+        ${plan}
+        ${isRoot ? "" : `<div class="chips">
+          <a class="chip" href="${gUrl(searchText(n))}" target="_blank" rel="noopener">Search the web ↗</a>
+          <a class="chip" href="${ytUrl(searchText(n))}" target="_blank" rel="noopener">YouTube ↗</a>
+          <a class="chip" href="${claudeUrl(n)}" target="_blank" rel="noopener">Plan it in a Claude chat ↗</a></div>`}
+      </div>
+      <div class="block">
+        <span class="label">Saved links</span>
+        ${links ? `<ul class="links">${links}</ul>` : ""}
+        <form class="row" id="s-link-form"><input class="field" id="s-link" placeholder="Paste a link: a tutorial, course, listing…" inputmode="url" autocomplete="off" aria-label="Link"><button class="btn ghost" type="submit">Save</button></form>
+      </div>
+      ${canClaude ? `<div class="block">
+        <span class="label">Ask Claude about this</span>
+        <form class="row" id="s-ask-form"><input class="field" id="s-ask" placeholder="e.g. What should I do first this week?" autocomplete="off" aria-label="Question for Claude"><button class="btn" type="submit">Ask</button></form>
+        ${A ? `<div class="answer"><span class="answer-q">${esc(A.q)}</span>\n<span id="s-answer-text">${esc(A.text || (A.loading ? "Thinking…" : ""))}</span></div>
+          ${A.loading ? `<button class="btn ghost small" id="s-ask-stop" style="align-self:flex-start">Stop</button>` : ""}
+          ${A.err ? `<div class="note-err">${esc(A.err)}</div>` : ""}` : ""}
+      </div>` : ""}`;
+  }
+
+  function adopt() {
+    if (state.example) { state.example = false; }
+  }
+  function mutate(fn) { adopt(); fn(); save(); render(); }
+
+  // ---------- layout ----------
+  const COL = 124, ROW = 186, PAD = 20, TOP = 18;
+  function layout(root) {
+    const pos = new Map(); let maxD = 0;
+    const width = n => n.children.length ? n.children.reduce((a, c) => a + width(c), 0) : 1;
+    const place = (n, d, x0, idx) => {
+      maxD = Math.max(maxD, d);
+      let x;
+      if (!n.children.length) x = x0 + 0.5;
+      else {
+        let cx = x0; const xs = [];
+        n.children.forEach((c, i) => { xs.push(place(c, d + 1, cx, i)); cx += width(c); });
+        x = (xs[0] + xs[xs.length - 1]) / 2;
+      }
+      pos.set(n.id, { x, d, idx });
+      return x;
+    };
+    const cols = width(root);
+    place(root, 0, 0, 0);
+    return { pos, cols, maxD };
+  }
+
+  function cubicAt(p0, p1, p2, p3, t) {
+    const u = 1 - t;
+    return {
+      x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
+      y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y,
+      dx: 3*u*u*(p1.x-p0.x) + 6*u*t*(p2.x-p1.x) + 3*t*t*(p3.x-p2.x),
+      dy: 3*u*u*(p1.y-p0.y) + 6*u*t*(p2.y-p1.y) + 3*t*t*(p3.y-p2.y)
+    };
+  }
+  const leafPath = (x, y, ang, s, fill) =>
+    `<path transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(ang*180/Math.PI).toFixed(1)})" d="M0 0 C ${s*0.3} ${-s*0.45}, ${s*0.8} ${-s*0.4}, ${s} 0 C ${s*0.8} ${s*0.4}, ${s*0.3} ${s*0.45}, 0 0 Z" fill="${fill}"/>`;
+
+  function drawCanvas() {
+    const doc = state.doc, root = doc.root;
+    const { pos, cols, maxD } = layout(root);
+    const wrap = $("#canvas-wrap");
+    const avail = wrap.clientWidth || Math.min(window.innerWidth - 32, 1100);
+    const W = Math.max(avail, cols * COL + PAD * 2 + 24);
+    const H = TOP + 30 + maxD * ROW + 190;
+    const off = (W - cols * COL) / 2;
+    const R = d => d === 0 ? 38 : 27;
+    const pt = n => {
+      const p = pos.get(n.id);
+      const stagger = p.d > 0 && p.idx % 2 === 1 ? -30 : 0;
+      return { x: off + p.x * COL, y: TOP + 64 + (maxD - p.d) * ROW + stagger, d: p.d, r: R(p.d) };
+    };
+
+    let svg = `<svg class="stems" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+    let html = "";
+    let leafSeed = 0;
+    const walk = (n, parent, siblingIndex, siblingCount) => {
+      const c = pt(n);
+      if (parent) {
+        const p = pt(parent);
+        const spread = (siblingIndex - (siblingCount - 1) / 2) * 5;
+        const s0 = { x: p.x + spread, y: p.y - p.r - 2 };
+        let side = c.x < p.x - 1 ? 1 : c.x > p.x + 1 ? -1 : (siblingIndex % 2 ? 1 : -1);
+        const e = { x: c.x + side * (c.r + 8), y: c.y + c.r * 0.5 };
+        const dy = s0.y - e.y;
+        const c1 = { x: s0.x, y: s0.y - Math.min(70, dy * 0.35) }, c2 = { x: c.x + side * 84, y: e.y + Math.min(60, dy * 0.3) };
+        const complete = progress(n).pct === 100;
+        const col = complete ? "var(--leaf)" : "var(--stem)";
+        svg += `<path class="stem" d="M ${s0.x.toFixed(1)} ${s0.y.toFixed(1)} C ${c1.x.toFixed(1)} ${c1.y.toFixed(1)}, ${c2.x.toFixed(1)} ${c2.y.toFixed(1)}, ${e.x.toFixed(1)} ${e.y.toFixed(1)}" fill="none" stroke="${col}" stroke-width="1.2" stroke-linecap="round"/>`;
+        // a leaf or two along the stem
+        [0.42, 0.72].slice(0, dy > 150 ? 2 : 1).forEach((t, k) => {
+          const q = cubicAt(s0, c1, c2, e, t);
+          const tan = Math.atan2(q.dy, q.dx);
+          const flip = (leafSeed++ + k) % 2 ? 1 : -1;
+          svg += leafPath(q.x, q.y, tan + flip * 0.8, 15, complete ? "var(--leaf)" : "var(--leaf-soft)");
+        });
+        svg += `<circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="2.6" fill="${col}"/>`;
+      }
+      const pr = progress(n);
+      const isLeaf = !n.children.length;
+      const done = isLeaf ? n.done : pr.pct === 100;
+      const isRoot = !parent;
+      const ringP = isLeaf ? (n.done ? 100 : 0) : pr.pct;
+      const count = isLeaf ? "" : `<span class="n-count">${pr.done}/${pr.total}</span>`;
+      html += `<button class="node ${done ? "done" : ""} ${isRoot ? "root" : ""} ${state.openId === n.id ? "open" : ""}" data-id="${n.id}" style="left:${c.x.toFixed(1)}px;top:${(c.y - c.r).toFixed(1)}px" ${state.example ? "disabled" : ""} aria-label="${esc(n.title)}${done ? ", done" : ""}${n.reminder ? ", has a reminder" : ""}">
+        <span class="disc" style="--size:${c.r * 2}px;--p:${ringP}%"><span class="disc-in">${done && isLeaf ? icon("sprout", 1.5).replace(ICONS.sprout, CHECK) : icon(n.icon)}</span>${n.reminder ? `<span class="bell" aria-hidden="true">${BELL}</span>` : ""}</span>
+        <span class="n-title">${esc(n.title)}</span>
+        ${n.note ? `<span class="n-note">${esc(n.note)}</span>` : ""}${count}
+      </button>`;
+      n.children.forEach((k, i) => walk(k, n, i, n.children.length));
+    };
+    walk(root, null, 0, 1);
+    svg += `</svg>`;
+
+    const canvas = $("#canvas");
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    canvas.innerHTML = svg + html;
+    if (!state.centered && W > avail) { wrap.scrollLeft = pt(root).x - avail / 2; state.centered = true; }
+  }
+
+  // ---------- reminders ----------
+  const BELL = `<svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>`;
+  const FREQS = { daily: "Every day", weekdays: "Weekdays", weekly: "Every week", every2: "Every 2 days", every3: "Every 3 days", fortnightly: "Every 2 weeks", monthly: "Every month" };
+  const BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const DAYNAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const needsDay = f => f === "weekly" || f === "fortnightly";
+  const p2 = x => String(x).padStart(2, "0");
+  const fmtTime = t => { const [h, m] = t.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); };
+  function remText(r) {
+    let t = FREQS[r.freq] + (needsDay(r.freq) ? " on " + DAYNAMES[r.day] : "") + " at " + fmtTime(r.time);
+    if (r.until) t += ", until " + new Date(r.until + "T00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    return t;
+  }
+  function firstDate(r) {
+    const [h, m] = r.time.split(":").map(Number), now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    const ok = x => r.freq === "weekdays" ? x.getDay() % 6 !== 0 : needsDay(r.freq) ? x.getDay() === r.day : true;
+    if (d <= now) d.setDate(d.getDate() + 1);
+    while (!ok(d)) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  function occursOn(r, date) {
+    const s = new Date(r.start); s.setHours(0, 0, 0, 0);
+    const d = new Date(date); d.setHours(0, 0, 0, 0);
+    if (d < s) return false;
+    if (r.until && d > new Date(r.until + "T00:00")) return false;
+    const diff = Math.round((d - s) / 864e5);
+    switch (r.freq) {
+      case "daily": return true;
+      case "weekdays": return d.getDay() % 6 !== 0;
+      case "weekly": return d.getDay() === r.day;
+      case "every2": return diff % 2 === 0;
+      case "every3": return diff % 3 === 0;
+      case "fortnightly": return d.getDay() === r.day && diff % 14 === 0;
+      case "monthly": return d.getDate() === s.getDate();
+    }
+    return false;
+  }
+  function allNodes(n = state.doc.root, out = []) { out.push(n); n.children.forEach(c => allNodes(c, out)); return out; }
+  function dueToday() {
+    const today = new Date();
+    return allNodes().filter(n => n.reminder && occursOn(n.reminder, today) && progress(n).pct < 100);
+  }
+  const appUrl = () => location.origin + location.pathname;
+  function icsFor(n) {
+    const r = n.reminder, s = new Date(r.start);
+    const f = d => `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(d.getHours())}${p2(d.getMinutes())}00`;
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+    let rule = { daily: "FREQ=DAILY", weekdays: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", weekly: `FREQ=WEEKLY;BYDAY=${BYDAY[r.day]}`,
+      every2: "FREQ=DAILY;INTERVAL=2", every3: "FREQ=DAILY;INTERVAL=3", fortnightly: `FREQ=WEEKLY;INTERVAL=2;BYDAY=${BYDAY[r.day]}`, monthly: "FREQ=MONTHLY" }[r.freq];
+    if (r.until) rule += `;UNTIL=${r.until.replace(/-/g, "")}T235959`;
+    const nextUp = n.children.length ? leaves(n).filter(l => !l.done).slice(0, 3).map(l => "- " + l.title).join("\n") : "";
+    const url = appUrl() + "#" + n.id;
+    const desc = (n.note ? n.note + "\n\n" : "") + (nextUp ? "Next up:\n" + nextUp + "\n\n" : "") + "Open Goal Grove: " + url;
+    const ex = t => String(t).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\;");
+    const fold = line => { let out = "", l = line; while (l.length > 73) { out += l.slice(0, 73) + "\r\n "; l = l.slice(73); } return out + l; };
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Goal Grove//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+      "BEGIN:VEVENT", `UID:${n.id}-${r.start}@goal-grove`, `DTSTAMP:${stamp}`, `DTSTART:${f(s)}`, "DURATION:PT15M", `RRULE:${rule}`,
+      `SUMMARY:${ex("Goal Grove: " + n.title)}`, `DESCRIPTION:${ex(desc)}`, `URL:${url}`,
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${ex(n.title)}`, "TRIGGER:PT0M", "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"].map(fold).join("\r\n") + "\r\n";
+  }
+  function calFile(n) {
+    const name = (n.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "goal") + "-reminder.ics";
+    return new File([icsFor(n)], name, { type: "text/calendar" });
+  }
+  function addToCalendar(n) {
+    const file = calFile(n);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  async function shareCalendar(n) {
+    const file = calFile(n);
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: n.title + " reminder" }); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    addToCalendar(n);
+  }
+  function remBlock(n) {
+    const r = n.reminder;
+    const msg = state.remMsg ? `<div class="small-print">${esc(state.remMsg)}</div>` : "";
+    if (r && !state.remEdit) return `<div class="block">
+        <span class="label">Reminder</span>
+        <div class="rem-summary">${BELL}<span style="flex:1">${esc(remText(r))}</span></div>
+        <div class="row wrapped"><button class="btn with-icon" id="rem-cal">Add to Calendar</button><button class="btn ghost" id="rem-share">Share</button><button class="btn ghost" id="rem-edit">Change</button><button class="btn ghost" id="rem-del">Remove</button></div>
+        ${msg || `<div class="small-print">Your iPhone's Calendar sends the alert at that time, even when the app is closed. Tap the alert to see what's next.</div>`}
+      </div>`;
+    if (!r && !state.remEdit) return `<div class="block"><span class="label">Reminder</span><button class="btn ghost with-icon" id="rem-new" style="align-self:flex-start">${BELL}Set a reminder</button>${msg}</div>`;
+    const d = r || { freq: "daily", time: "18:00", day: new Date().getDay(), until: n.target || "" };
+    return `<div class="block"><span class="label">Reminder</span>
+      <form id="rem-form" style="display:flex;flex-direction:column;gap:10px">
+        <div class="rem-grid">
+          <label>How often<select class="field" id="rem-freq">${Object.entries(FREQS).map(([k, v]) => `<option value="${k}" ${d.freq === k ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+          <label>Time<input class="field" type="time" id="rem-time" value="${d.time}" required></label>
+          <label>On<select class="field" id="rem-day" ${needsDay(d.freq) ? "" : "disabled"}>${DAYNAMES.map((x, i) => `<option value="${i}" ${+d.day === i ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+          <label>Until (optional)<input class="field" type="date" id="rem-until" value="${esc(d.until || "")}"></label>
+        </div>
+        ${r ? `<div class="small-print">After you change it, delete the old event from your Calendar so you don't get both.</div>` : ""}
+        <div class="row wrapped"><button class="btn with-icon" type="submit">${BELL}Save and add to Calendar</button><button class="btn ghost" type="button" id="rem-cancel">Cancel</button></div>
+      </form></div>`;
+  }
+
+  // ---------- progress meter ----------
+  const CHEV = `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+  function drawMeter() {
+    const host = $("#meter-host"), root = state.doc.root;
+    if (!root.children.length) { host.innerHTML = ""; return; }
+    const pr = progress(root), ls = leaves(root), now = new Date();
+    const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const days = [...Array(7)].map((_, i) => {
+      const start = new Date(day0); start.setDate(start.getDate() - (6 - i));
+      const t0 = start.getTime(), t1 = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1).getTime();
+      return { label: i === 6 ? "Today" : start.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3),
+        n: ls.filter(l => l.done && l.doneAt >= t0 && l.doneAt < t1).length };
+    });
+    const week = days.reduce((a, d) => a + d.n, 0), max = Math.max(1, ...days.map(d => d.n));
+    const due = state.example ? [] : dueToday();
+    const open = state.meterOpen;
+    host.innerHTML = `<section class="meter" aria-label="Progress">
+      <button class="meter-top" id="meter-toggle" aria-expanded="${open}">
+        <span class="meter-num">${pr.pct}<small>%</small></span>
+        <span class="meter-main">
+          <span class="meter-label"><b>${pr.done} of ${pr.total}</b> steps done${week ? ` · <b>${week}</b> this week` : ""}</span>
+          <span class="bar" role="progressbar" aria-label="Overall progress" aria-valuenow="${pr.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pr.pct}%"></i></span>
+        </span>${CHEV}
+      </button>
+      ${due.length ? `<div class="today-row"><span class="label">Today</span>${due.map(n => `<button class="chip" data-goto-node="${n.id}">${BELL}${esc(n.title)}</button>`).join("")}</div>` : ""}
+      ${open ? `<div class="meter-body">
+        <div class="goal-rows">${root.children.map(g => { const p = progress(g); return `<button class="goal-row" data-goto-node="${g.id}" ${state.example ? "disabled" : ""}>${icon(g.icon)}<span class="gt">${esc(g.title)}</span><span class="gp">${p.done}/${p.total} · ${p.pct}%</span><span class="bar"><i style="width:${p.pct}%"></i></span></button>`; }).join("")}</div>
+        <div><span class="label">Steps finished, last 7 days</span>
+          <div class="week">${days.map((d, i) => `<div class="wk ${i === 6 ? "today" : ""}"><b>${d.n || ""}</b><i style="height:${Math.round(d.n / max * 58)}px"></i><span>${d.label}</span></div>`).join("")}</div></div>
+      </div>` : ""}
+    </section>`;
+  }
+  function toggleDone(n) { n.done = !n.done; if (n.done) n.doneAt = Date.now(); else delete n.doneAt; }
+  function openFromHash() {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (id && !state.example && find(id)) { state.settings = false; openNode(id); try { history.replaceState(null, "", location.pathname); } catch {} }
+  }
+
+  // ---------- sheet ----------
+  function drawSheet() {
+    const host = $("#sheet-host");
+    const hit = state.openId && !state.example ? find(state.openId) : null;
+    if (!hit) { host.innerHTML = ""; return; }
+    const { n, parent } = hit;
+    const isRoot = !parent, isLeaf = !n.children.length, pr = progress(n);
+    host.innerHTML = `<section class="sheet" role="dialog" aria-label="Edit ${esc(n.title)}">
+      <div class="sheet-head">
+        <span class="eyebrow">${isRoot ? "Your root" : isLeaf ? "Step" : "Goal"}${parent && !isRoot ? ` · in ${esc(parent.title)}` : ""}</span>
+        <button class="x" id="s-close" aria-label="Close">✕</button>
+      </div>
+      <input class="s-title" id="s-title" value="${esc(n.title)}" aria-label="Name">
+      <textarea class="s-note" id="s-note" placeholder="A short note, like why it matters" aria-label="Note">${esc(n.note || "")}</textarea>
+      <div class="icons" role="group" aria-label="Icon">${Object.keys(ICONS).map(k =>
+        `<button class="icon-pick" data-icon="${k}" aria-pressed="${n.icon === k}" aria-label="${k}" title="${k}">${icon(k)}</button>`).join("")}</div>
+      ${isLeaf && !isRoot
+        ? `<button class="done-toggle" id="s-done"><span class="tick" aria-pressed="${n.done}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${CHECK}"/></svg></span>${n.done ? "Done. Tap to undo." : "Mark as done"}</button>`
+        : (n.children.length ? `<div class="progress-meter"><span class="meter-label"><b>${pr.pct}%</b> grown · ${pr.done} of ${pr.total} steps done</span><span class="bar" role="progressbar" aria-label="Progress" aria-valuenow="${pr.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pr.pct}%"></i></span></div>` : "")}
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span class="label">${isLeaf ? "Sprout branches from this to break it down" : "Branches"}</span>
+        ${n.children.length ? `<ul class="kids">${n.children.map(k => {
+          const kl = !k.children.length, kp = progress(k);
+          return `<li class="kid">${kl ? `<button class="tick" data-tick="${k.id}" aria-pressed="${k.done}" aria-label="Mark ${esc(k.title)} done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${CHECK}"/></svg></button>`
+            : `<span class="tick" style="border-style:dashed" aria-hidden="true"></span>`}
+            <button class="name" data-goto="${k.id}">${esc(k.title)}</button>
+            <span class="meta">${kl ? "" : kp.pct + "%"}</span></li>`; }).join("")}</ul>` : ""}
+        <form class="row" id="s-add-form"><input class="field" id="s-add" placeholder="New branch" autocomplete="off" aria-label="New branch"><button class="btn" type="submit">Add</button></form>
+      </div>
+      ${remBlock(n)}
+      ${getThere(n, isRoot)}
+      ${isRoot ? "" : `<div class="sheet-foot">${state.confirmDel
+        ? `<span>Delete this${n.children.length ? " and everything branching from it" : ""}?</span><span class="row"><button class="btn danger" id="s-del-yes">Delete</button><button class="btn ghost" id="s-del-no">Keep</button></span>`
+        : `<button class="btn ghost" id="s-up">Back to ${esc(parent.title)}</button><button class="btn ghost" id="s-del">Delete</button>`}</div>`}
+    </section>`;
+  }
+
+  // ---------- render ----------
+  function render() {
+    const focusId = document.activeElement && document.activeElement.id;
+    const doc = state.doc;
+    if (document.activeElement?.id !== "page-title") $("#page-title").value = doc.title || "My Goals";
+    if (document.activeElement?.id !== "page-sub") $("#page-sub").value = doc.subtitle || "";
+    $("#page-title").readOnly = $("#page-sub").readOnly = state.example;
+    $("#banner").innerHTML = state.example && state.ready
+      ? `<div class="banner"><span class="tag">Example</span><span style="flex:1;min-width:200px">This is what a grown plan looks like. Each node can sprout its own branches, and steps fill in green when done.</span><button class="btn" id="use-example">Start from this</button><button class="btn ghost" id="start-fresh">Start fresh</button></div>`
+      : "";
+    drawMeter();
+    drawCanvas();
+    drawSheet();
+    drawSettings();
+    if (focusId) { const el = document.getElementById(focusId); if (el && el !== document.activeElement) el.focus(); }
+  }
+
+  // ---------- events ----------
+  function startFresh() {
+    state.doc = { title: "My Goals", subtitle: "A calmer, more intentional future.", root: node("Goals", "sprout", "A better, freer life.") };
+    state.example = false; state.centered = false; save();
+  }
+  function openNode(id) {
+    if (id !== state.openId) { planCtl?.abort(); askCtl?.abort(); state.plan = null; state.ask = null; state.remEdit = false; state.remMsg = ""; }
+    state.openId = id; state.confirmDel = false; render();
+  }
+
+  document.addEventListener("click", e => {
+    const t = e.target;
+    if (t.closest("#meter-toggle")) { state.meterOpen = !state.meterOpen; render(); return; }
+    const gn = t.closest("[data-goto-node]");
+    if (gn && !gn.disabled) { state.settings = false; openNode(gn.dataset.gotoNode); return; }
+    if (t.closest("#rem-new") || t.closest("#rem-edit")) { state.remEdit = true; state.remMsg = ""; render(); return; }
+    if (t.closest("#rem-cancel")) { state.remEdit = false; render(); return; }
+    if (t.closest("#rem-cal")) { addToCalendar(find(state.openId).n); return; }
+    if (t.closest("#rem-share")) { shareCalendar(find(state.openId).n); return; }
+    if (t.closest("#rem-del")) { const { n } = find(state.openId); state.remMsg = "Reminder removed. If you added it to Calendar, delete the event there too."; mutate(() => delete n.reminder); return; }
+    if (t.closest("#open-settings") || t.closest("[data-open-settings]")) { openNode(null); state.settings = true; state.keyMsg = state.backupMsg = ""; render(); return; }
+    if (t.closest("#set-close")) { state.settings = false; state.importDoc = null; render(); return; }
+    if (t.closest("#key-remove")) { lsDel(KEY_KEY); claudeOff = ""; render(); return; }
+    if (t.closest("#export")) { exportBackup(); return; }
+    if (t.closest("#import-no")) { state.importDoc = null; render(); return; }
+    if (t.closest("#import-yes")) { state.doc = state.importDoc; state.importDoc = null; state.example = false; state.centered = false; save(); state.backupMsg = "Backup restored."; render(); return; }
+    if (t.closest("#use-example")) {
+      // keep the shape, clear the ticks so it's yours to grow
+      const clear = n => { n.done = false; n.children.forEach(clear); };
+      clear(state.doc.root); state.example = false; save(); render(); return;
+    }
+    if (t.closest("#start-fresh")) { startFresh(); openNode(state.doc.root.id); return; }
+    if (t.closest("#add-top")) {
+      if (state.example) startFresh();
+      openNode(state.doc.root.id);
+      setTimeout(() => $("#s-add")?.focus(), 0); return;
+    }
+    const nodeBtn = t.closest(".node");
+    if (nodeBtn && !nodeBtn.disabled) { state.settings = false; openNode(state.openId === nodeBtn.dataset.id ? null : nodeBtn.dataset.id); return; }
+    if (t.closest("#s-close")) { openNode(null); return; }
+    if (t.closest("#s-plan-stop")) { planCtl?.abort(); return; }
+    if (t.closest("#s-ask-stop")) { askCtl?.abort(); return; }
+    if (t.closest("#s-plan")) { runPlan(find(state.openId).n); return; }
+    const sug = t.closest("[data-sug]");
+    if (sug) { const i = +sug.dataset.sug; state.plan.sel.has(i) ? state.plan.sel.delete(i) : state.plan.sel.add(i); render(); return; }
+    if (t.closest("#s-plan-add")) {
+      const { n } = find(state.openId), P = state.plan;
+      mutate(() => {
+        n.done = false;
+        P.items.forEach((it, i) => { if (P.sel.has(i)) { const k = node(it.title, it.icon, it.note); if (it.search) k.links = [{ label: "Look it up: " + it.search, url: gUrl(it.search) }]; n.children.push(k); } });
+        state.plan = null;
+      });
+      return;
+    }
+    const un = t.closest("[data-unlink]");
+    if (un) { const { n } = find(state.openId); mutate(() => n.links.splice(+un.dataset.unlink, 1)); return; }
+    const pick = t.closest("[data-icon]");
+    if (pick) { const { n } = find(state.openId); mutate(() => n.icon = pick.dataset.icon); return; }
+    if (t.closest("#s-done")) { const { n } = find(state.openId); mutate(() => toggleDone(n)); return; }
+    const tick = t.closest("[data-tick]");
+    if (tick) { const { n } = find(tick.dataset.tick); mutate(() => toggleDone(n)); return; }
+    const go = t.closest("[data-goto]");
+    if (go) { openNode(go.dataset.goto); return; }
+    if (t.closest("#s-up")) { openNode(find(state.openId).parent.id); return; }
+    if (t.closest("#s-del")) { state.confirmDel = true; render(); return; }
+    if (t.closest("#s-del-no")) { state.confirmDel = false; render(); return; }
+    if (t.closest("#s-del-yes")) {
+      const { n, parent } = find(state.openId);
+      mutate(() => { parent.children = parent.children.filter(c => c !== n); state.openId = parent.id; state.confirmDel = false; });
+      return;
+    }
+    if (state.openId && !t.closest(".sheet") && t.closest("#canvas-wrap")) openNode(null);
+  });
+
+  document.addEventListener("submit", e => {
+    if (e.target.id === "rem-form") {
+      e.preventDefault();
+      const { n } = find(state.openId);
+      const freq = $("#rem-freq").value, time = $("#rem-time").value || "18:00";
+      const r = { freq, time, day: +$("#rem-day").value, until: $("#rem-until").value || "" };
+      r.start = firstDate(r).getTime();
+      state.remEdit = false; state.remMsg = "Saved. Tap Add on the calendar screen to switch on the alerts.";
+      mutate(() => n.reminder = r);
+      addToCalendar(n);
+      return;
+    }
+    if (e.target.id === "key-form") {
+      e.preventDefault();
+      const v = $("#key-input").value.trim();
+      if (!/^sk-ant-/.test(v)) { state.keyMsg = "That doesn't look like an Anthropic key. It should start with sk-ant-."; render(); return; }
+      lsSet(KEY_KEY, v); state.keyMsg = ""; claudeOff = ""; render(); return;
+    }
+    if (e.target.id === "s-link-form") {
+      e.preventDefault();
+      let v = $("#s-link").value.trim(); if (!v) return;
+      if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+      try { new URL(v); } catch { $("#s-link").setCustomValidity("That doesn't look like a web link."); $("#s-link").reportValidity(); return; }
+      const { n } = find(state.openId);
+      mutate(() => { n.links = n.links || []; n.links.push({ label: hostOf(v), url: v }); });
+      return;
+    }
+    if (e.target.id === "s-ask-form") {
+      e.preventDefault();
+      const q = $("#s-ask").value.trim(); if (!q) return;
+      runAsk(find(state.openId).n, q);
+      return;
+    }
+    if (e.target.id !== "s-add-form") return;
+    e.preventDefault();
+    const v = $("#s-add").value.trim(); if (!v) return;
+    const { n } = find(state.openId);
+    mutate(() => { n.done = false; n.children.push(node(v, n.id === state.doc.root.id ? "flag" : "sprout")); });
+    $("#s-add")?.focus();
+  });
+
+  document.addEventListener("change", e => {
+    const t = e.target;
+    if (t.id === "rem-freq") { const d = $("#rem-day"); if (d) d.disabled = !needsDay(t.value); return; }
+    if (t.id === "rem-time" || t.id === "rem-day" || t.id === "rem-until") return;
+    if (t.id === "import-file" && t.files && t.files[0]) {
+      t.files[0].text().then(txt => {
+        try { const d = JSON.parse(txt); if (!d || !d.root || !Array.isArray(d.root.children)) throw 0; state.importDoc = d; state.backupMsg = ""; }
+        catch { state.importDoc = null; state.backupMsg = "That file isn't a Goal Grove backup."; }
+        render();
+      });
+      return;
+    }
+    if (state.example) return;
+    if (t.id === "page-title") { const v = t.value.trim() || "My Goals"; mutate(() => state.doc.title = v); }
+    else if (t.id === "page-sub") mutate(() => state.doc.subtitle = t.value.trim());
+    else if (t.id === "s-title") { const v = t.value.trim(); const { n } = find(state.openId); if (v) mutate(() => n.title = v); else render(); }
+    else if (t.id === "s-note") { const { n } = find(state.openId); mutate(() => n.note = t.value.trim()); }
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && state.settings) { state.settings = false; render(); }
+    if (e.key === "Escape" && state.openId) openNode(null);
+    if (e.target.id === "s-link") e.target.setCustomValidity("");
+    if (e.key === "Enter" && ["page-title", "page-sub", "s-title"].includes(e.target.id)) { e.preventDefault(); e.target.blur(); }
+  });
+
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawCanvas, 120); });
+
+  boot();
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
+  if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+})();
+</script>
+
+</body>
+</html>
